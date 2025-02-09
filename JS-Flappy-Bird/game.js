@@ -1,3 +1,89 @@
+// Assuming the NEAT and NeuralNetwork classes are imported
+import { NEAT } from './neat.js'; // Import the NEAT class
+
+let neat; // NEAT object
+let birds = []; // Array of bird objects
+
+function setup() {
+  // Initialize NEAT with input size, output size, population size, mutation rate, and crossover rate
+  neat = new NEAT({
+    inputSize: 5, // Example input size (e.g., position, velocity, pipe distance)
+    outputSize: 1, // Only 1 output: flap (0 = no flap, 1 = flap)
+    populationSize: 50,
+    mutationRate: 0.05,
+    crossoverRate: 0.7
+  });
+
+  // Initialize birds
+  for (let i = 0; i < neat.populationSize; i++) {
+    birds.push(createBird());
+  }
+}
+
+function createBird() {
+  return {
+    x: 100,
+    y: height / 2,
+    velocity: 0,
+    score: 0,
+    alive: true,
+    neuralNetwork: neat.population[i] // Assign a neural network from NEAT population to the bird
+  };
+}
+
+function update() {
+  // Update each bird's status
+  birds.forEach(bird => {
+    if (bird.alive) {
+      // Get input for the neural network (bird's state)
+      let inputs = [
+        bird.y,             // Bird's position
+        bird.velocity,      // Bird's velocity
+        getDistanceToNextPipe() // Distance to the next pipe (or any relevant inputs)
+      ];
+      
+      // Use the best network to predict whether the bird should flap
+      let output = bird.neuralNetwork.predict(inputs);
+      if (output > 0.5) {
+        bird.velocity = -5; // Flap (adjust velocity or other game actions)
+      }
+
+      // Update the bird's position and check for collisions, etc.
+      bird.y += bird.velocity;
+      bird.velocity += 0.2; // Gravity
+
+      // Update score or fitness (based on survival time or distance traveled)
+      bird.score++;
+    }
+  });
+
+  // Remove dead birds
+  birds = birds.filter(bird => bird.alive);
+
+  // Update fitness for the NEAT population
+  neat.updateFitness();
+
+  // Evolve the population periodically
+  if (birds.length === 0) {
+    neat.evolve(); // Evolve after all birds die
+    resetGame(); // Reset the game state for the new generation
+  }
+}
+
+function resetGame() {
+  // Reset birds and pipes for the new generation
+  birds = [];
+  for (let i = 0; i < neat.populationSize; i++) {
+    birds.push(createBird());
+  }
+}
+
+function getDistanceToNextPipe() {
+  // Calculate and return the distance to the next pipe
+  // (This is just a placeholder, implement according to your game's logic)
+  return 200;
+}
+
 
 const RAD = Math.PI / 180;
 const scrn = document.getElementById("canvas");
