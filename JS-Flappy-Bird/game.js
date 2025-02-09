@@ -1,137 +1,22 @@
-// Assuming the NEAT and NeuralNetwork classes are imported
-import { NEAT } from './neat.js'; // Import the NEAT class
+import { NEAT } from "./neat.js";
 
-let neat; // NEAT object
-let birds = []; // Array of bird objects
-
-function setup() {
-  // Initialize NEAT with input size, output size, population size, mutation rate, and crossover rate
-  neat = new NEAT({
-    inputSize: 5, // Example input size (e.g., position, velocity, pipe distance)
-    outputSize: 1, // Only 1 output: flap (0 = no flap, 1 = flap)
-    populationSize: 50,
-    mutationRate: 0.05,
-    crossoverRate: 0.7
-  });
-
-  // Initialize birds
-  for (let i = 0; i < neat.populationSize; i++) {
-    birds.push(createBird());
-  }
-}
-
-function createBird() {
-  return {
-    x: 100,
-    y: height / 2,
-    velocity: 0,
-    score: 0,
-    alive: true,
-    neuralNetwork: neat.population[i] // Assign a neural network from NEAT population to the bird
-  };
-}
-
-function update() {
-  // Update each bird's status
-  birds.forEach(bird => {
-    if (bird.alive) {
-      // Get input for the neural network (bird's state)
-      let inputs = [
-        bird.y,             // Bird's position
-        bird.velocity,      // Bird's velocity
-        getDistanceToNextPipe() // Distance to the next pipe (or any relevant inputs)
-      ];
-      
-      // Use the best network to predict whether the bird should flap
-      let output = bird.neuralNetwork.predict(inputs);
-      if (output > 0.5) {
-        bird.velocity = -5; // Flap (adjust velocity or other game actions)
-      }
-
-      // Update the bird's position and check for collisions, etc.
-      bird.y += bird.velocity;
-      bird.velocity += 0.2; // Gravity
-
-      // Update score or fitness (based on survival time or distance traveled)
-      bird.score++;
-    }
-  });
-
-  // Remove dead birds
-  birds = birds.filter(bird => bird.alive);
-
-  // Update fitness for the NEAT population
-  neat.updateFitness();
-
-  // Evolve the population periodically
-  if (birds.length === 0) {
-    neat.evolve(); // Evolve after all birds die
-    resetGame(); // Reset the game state for the new generation
-  }
-}
-
-function resetGame() {
-  // Reset birds and pipes for the new generation
-  birds = [];
-  for (let i = 0; i < neat.populationSize; i++) {
-    birds.push(createBird());
-  }
-}
-
-function getDistanceToNextPipe() {
-  // Calculate and return the distance to the next pipe
-  // (This is just a placeholder, implement according to your game's logic)
-  return 200;
-}
-
-
+// Canvas setup
 const RAD = Math.PI / 180;
 const scrn = document.getElementById("canvas");
 const sctx = scrn.getContext("2d");
 scrn.tabIndex = 1;
-scrn.addEventListener("click", () => {
-  switch (state.curr) {
-    case state.getReady:
-      state.curr = state.Play;
-      SFX.start.play();
-      break;
-    case state.Play:
-      bird.flap();
-      break;
-    case state.gameOver:
-      state.curr = state.getReady;
-      bird.speed = 0;
-      bird.y = 100;
-      pipe.pipes = [];
-      UI.score.curr = 0;
-      SFX.played = false;
-      break;
-  }
+
+// Initialize NEAT
+const neat = new NEAT({
+  inputSize: 4, // Bird y, velocity, next pipe x, next pipe gap y
+  hiddenSize: 4,
+  outputSize: 1, // Flap (1) or not flap (0)
+  populationSize: 50,
+  mutationRate: 0.1,
+  crossoverRate: 0.7,
 });
 
-scrn.onkeydown = function keyDown(e) {
-  if (e.keyCode == 32 || e.keyCode == 87 || e.keyCode == 38) {
-    // Space Key or W key or arrow up
-    switch (state.curr) {
-      case state.getReady:
-        state.curr = state.Play;
-        SFX.start.play();
-        break;
-      case state.Play:
-        bird.flap();
-        break;
-      case state.gameOver:
-        state.curr = state.getReady;
-        bird.speed = 0;
-        bird.y = 100;
-        pipe.pipes = [];
-        UI.score.curr = 0;
-        SFX.played = false;
-        break;
-    }
-  }
-};
-
+// Game state
 let frames = 0;
 let dx = 2;
 const state = {
@@ -140,285 +25,128 @@ const state = {
   Play: 1,
   gameOver: 2,
 };
-const SFX = {
-  start: new Audio(),
-  flap: new Audio(),
-  score: new Audio(),
-  hit: new Audio(),
-  die: new Audio(),
-  played: false,
-};
-const gnd = {
-  sprite: new Image(),
-  x: 0,
-  y: 0,
-  draw: function () {
-    this.y = parseFloat(scrn.height - this.sprite.height);
-    sctx.drawImage(this.sprite, this.x, this.y);
-  },
-  update: function () {
-    if (state.curr != state.Play) return;
-    this.x -= dx;
-    this.x = this.x % (this.sprite.width / 2);
-  },
-};
-const bg = {
-  sprite: new Image(),
-  x: 0,
-  y: 0,
-  draw: function () {
-    y = parseFloat(scrn.height - this.sprite.height);
-    sctx.drawImage(this.sprite, this.x, y);
-  },
-};
-const pipe = {
-  top: { sprite: new Image() },
-  bot: { sprite: new Image() },
-  gap: 85,
-  moved: true,
-  pipes: [],
-  draw: function () {
-    for (let i = 0; i < this.pipes.length; i++) {
-      let p = this.pipes[i];
-      sctx.drawImage(this.top.sprite, p.x, p.y);
-      sctx.drawImage(
-        this.bot.sprite,
-        p.x,
-        p.y + parseFloat(this.top.sprite.height) + this.gap
-      );
-    }
-  },
-  update: function () {
-    if (state.curr != state.Play) return;
-    if (frames % 100 == 0) {
-      this.pipes.push({
-        x: parseFloat(scrn.width),
-        y: -210 * Math.min(Math.random() + 1, 1.8),
-      });
-    }
-    this.pipes.forEach((pipe) => {
-      pipe.x -= dx;
-    });
 
-    if (this.pipes.length && this.pipes[0].x < -this.top.sprite.width) {
-      this.pipes.shift();
-      this.moved = true;
-    }
-  },
-};
+// Game objects
 const bird = {
-  animations: [
-    { sprite: new Image() },
-    { sprite: new Image() },
-    { sprite: new Image() },
-    { sprite: new Image() },
-  ],
-  rotatation: 0,
-  x: 50,
   y: 100,
   speed: 0,
   gravity: 0.125,
   thrust: 3.6,
-  frame: 0,
-  draw: function () {
-    let h = this.animations[this.frame].sprite.height;
-    let w = this.animations[this.frame].sprite.width;
-    sctx.save();
-    sctx.translate(this.x, this.y);
-    sctx.rotate(this.rotatation * RAD);
-    sctx.drawImage(this.animations[this.frame].sprite, -w / 2, -h / 2);
-    sctx.restore();
-  },
   update: function () {
-    let r = parseFloat(this.animations[0].sprite.width) / 2;
-    switch (state.curr) {
-      case state.getReady:
-        this.rotatation = 0;
-        this.y += frames % 10 == 0 ? Math.sin(frames * RAD) : 0;
-        this.frame += frames % 10 == 0 ? 1 : 0;
-        break;
-      case state.Play:
-        this.frame += frames % 5 == 0 ? 1 : 0;
-        this.y += this.speed;
-        this.setRotation();
-        this.speed += this.gravity;
-        if (this.y + r >= gnd.y || this.collisioned()) {
-          state.curr = state.gameOver;
-        }
-
-        break;
-      case state.gameOver:
-        this.frame = 1;
-        if (this.y + r < gnd.y) {
-          this.y += this.speed;
-          this.setRotation();
-          this.speed += this.gravity * 2;
-        } else {
-          this.speed = 0;
-          this.y = gnd.y - r;
-          this.rotatation = 90;
-          if (!SFX.played) {
-            SFX.die.play();
-            SFX.played = true;
-          }
-        }
-
-        break;
+    if (state.curr === state.Play) {
+      this.y += this.speed;
+      this.speed += this.gravity;
     }
-    this.frame = this.frame % this.animations.length;
   },
   flap: function () {
-    if (this.y > 0) {
-      SFX.flap.play();
-      this.speed = -this.thrust;
-    }
-  },
-  setRotation: function () {
-    if (this.speed <= 0) {
-      this.rotatation = Math.max(-25, (-25 * this.speed) / (-1 * this.thrust));
-    } else if (this.speed > 0) {
-      this.rotatation = Math.min(90, (90 * this.speed) / (this.thrust * 2));
-    }
-  },
-  collisioned: function () {
-    if (!pipe.pipes.length) return;
-    let bird = this.animations[0].sprite;
-    let x = pipe.pipes[0].x;
-    let y = pipe.pipes[0].y;
-    let r = bird.height / 4 + bird.width / 4;
-    let roof = y + parseFloat(pipe.top.sprite.height);
-    let floor = roof + pipe.gap;
-    let w = parseFloat(pipe.top.sprite.width);
-    if (this.x + r >= x) {
-      if (this.x + r < x + w) {
-        if (this.y - r <= roof || this.y + r >= floor) {
-          SFX.hit.play();
-          return true;
-        }
-      } else if (pipe.moved) {
-        UI.score.curr++;
-        SFX.score.play();
-        pipe.moved = false;
-      }
-    }
+    this.speed = -this.thrust;
   },
 };
-const UI = {
-  getReady: { sprite: new Image() },
-  gameOver: { sprite: new Image() },
-  tap: [{ sprite: new Image() }, { sprite: new Image() }],
-  score: {
-    curr: 0,
-    best: 0,
-  },
-  x: 0,
-  y: 0,
-  tx: 0,
-  ty: 0,
-  frame: 0,
-  draw: function () {
-    switch (state.curr) {
-      case state.getReady:
-        this.y = parseFloat(scrn.height - this.getReady.sprite.height) / 2;
-        this.x = parseFloat(scrn.width - this.getReady.sprite.width) / 2;
-        this.tx = parseFloat(scrn.width - this.tap[0].sprite.width) / 2;
-        this.ty =
-          this.y + this.getReady.sprite.height - this.tap[0].sprite.height;
-        sctx.drawImage(this.getReady.sprite, this.x, this.y);
-        sctx.drawImage(this.tap[this.frame].sprite, this.tx, this.ty);
-        break;
-      case state.gameOver:
-        this.y = parseFloat(scrn.height - this.gameOver.sprite.height) / 2;
-        this.x = parseFloat(scrn.width - this.gameOver.sprite.width) / 2;
-        this.tx = parseFloat(scrn.width - this.tap[0].sprite.width) / 2;
-        this.ty =
-          this.y + this.gameOver.sprite.height - this.tap[0].sprite.height;
-        sctx.drawImage(this.gameOver.sprite, this.x, this.y);
-        sctx.drawImage(this.tap[this.frame].sprite, this.tx, this.ty);
-        break;
-    }
-    this.drawScore();
-  },
-  drawScore: function () {
-    sctx.fillStyle = "#FFFFFF";
-    sctx.strokeStyle = "#000000";
-    switch (state.curr) {
-      case state.Play:
-        sctx.lineWidth = "2";
-        sctx.font = "35px Squada One";
-        sctx.fillText(this.score.curr, scrn.width / 2 - 5, 50);
-        sctx.strokeText(this.score.curr, scrn.width / 2 - 5, 50);
-        break;
-      case state.gameOver:
-        sctx.lineWidth = "2";
-        sctx.font = "40px Squada One";
-        let sc = `SCORE :     ${this.score.curr}`;
-        try {
-          this.score.best = Math.max(
-            this.score.curr,
-            localStorage.getItem("best")
-          );
-          localStorage.setItem("best", this.score.best);
-          let bs = `BEST  :     ${this.score.best}`;
-          sctx.fillText(sc, scrn.width / 2 - 80, scrn.height / 2 + 0);
-          sctx.strokeText(sc, scrn.width / 2 - 80, scrn.height / 2 + 0);
-          sctx.fillText(bs, scrn.width / 2 - 80, scrn.height / 2 + 30);
-          sctx.strokeText(bs, scrn.width / 2 - 80, scrn.height / 2 + 30);
-        } catch (e) {
-          sctx.fillText(sc, scrn.width / 2 - 85, scrn.height / 2 + 15);
-          sctx.strokeText(sc, scrn.width / 2 - 85, scrn.height / 2 + 15);
-        }
 
-        break;
-    }
-  },
+const pipe = {
+  pipes: [],
+  gap: 85,
   update: function () {
-    if (state.curr == state.Play) return;
-    this.frame += frames % 10 == 0 ? 1 : 0;
-    this.frame = this.frame % this.tap.length;
+    if (state.curr !== state.Play) return;
+    if (frames % 100 === 0) {
+      this.pipes.push({
+        x: scrn.width,
+        y: -210 * Math.min(Math.random() + 1, 1.8),
+      });
+    }
+    this.pipes.forEach((p) => (p.x -= dx));
+    if (this.pipes.length && this.pipes[0].x < -50) {
+      this.pipes.shift();
+    }
   },
 };
 
-gnd.sprite.src = "img/ground.png";
-bg.sprite.src = "img/BG.png";
-pipe.top.sprite.src = "img/toppipe.png";
-pipe.bot.sprite.src = "img/botpipe.png";
-UI.gameOver.sprite.src = "img/go.png";
-UI.getReady.sprite.src = "img/getready.png";
-UI.tap[0].sprite.src = "img/tap/t0.png";
-UI.tap[1].sprite.src = "img/tap/t1.png";
-bird.animations[0].sprite.src = "img/bird/b0.png";
-bird.animations[1].sprite.src = "img/bird/b1.png";
-bird.animations[2].sprite.src = "img/bird/b2.png";
-bird.animations[3].sprite.src = "img/bird/b0.png";
-SFX.start.src = "sfx/start.wav";
-SFX.flap.src = "sfx/flap.wav";
-SFX.score.src = "sfx/score.wav";
-SFX.hit.src = "sfx/hit.wav";
-SFX.die.src = "sfx/die.wav";
-
+// Game loop
 function gameLoop() {
-  update();
+  
+  if (state.curr === state.Play) {
+    // Update all birds in the population
+    neat.population.forEach((network) => {
+      const inputs = [
+        bird.y / scrn.height, // Normalized bird height
+        bird.speed / 10, // Normalized speed
+        (pipe.pipes[0]?.x || scrn.width) / scrn.width, // Normalized pipe x
+        (pipe.pipes[0]?.y || 0) / scrn.height, // Normalized pipe y
+      ];
+
+      // Predict whether to flap
+      const shouldFlap = network.predict(inputs);
+      if (shouldFlap) bird.flap();
+
+      // Update bird and pipes
+      bird.update();
+      pipe.update();
+
+      // Check for collisions
+      if (bird.y < 0 || bird.y > scrn.height || checkCollision()) {
+        state.curr = state.gameOver;
+      }
+
+      // Update fitness (score is based on frames survived)
+      network.updateScore(frames);
+    });
+
+    // Evolve the population if all birds are dead
+    if (state.curr === state.gameOver) {
+      neat.updateFitness();
+      neat.evolve();
+      resetGame();
+    }
+  }
+
   draw();
   frames++;
+  requestAnimationFrame(gameLoop);
 }
 
-function update() {
-  bird.update();
-  gnd.update();
-  pipe.update();
-  UI.update();
+// Reset game for the next generation
+function resetGame() {
+  bird.y = 100;
+  bird.speed = 0;
+  pipe.pipes = [];
+  state.curr = state.Play;
+  frames = 0;
 }
 
+// Check for collisions
+function checkCollision() {
+  if (!pipe.pipes.length) return false;
+  const p = pipe.pipes[0];
+  const birdTop = bird.y - 10;
+  const birdBottom = bird.y + 10;
+  const pipeTop = p.y;
+  const pipeBottom = p.y + pipe.gap;
+  return (
+    birdBottom > pipeBottom || birdTop < pipeTop
+  );
+}
+
+// Draw game objects
 function draw() {
-  sctx.fillStyle = "#30c0df";
-  sctx.fillRect(0, 0, scrn.width, scrn.height);
-  bg.draw();
-  pipe.draw();
+  sctx.clearRect(0, 0, scrn.width, scrn.height);
 
-  bird.draw();
-  gnd.draw();
-  UI.draw();
+  // Draw pipes
+  pipe.pipes.forEach((p) => {
+    sctx.fillStyle = "green";
+    sctx.fillRect(p.x, 0, 50, p.y);
+    sctx.fillRect(p.x, p.y + pipe.gap, 50, scrn.height - p.y - pipe.gap);
+  });
+
+  // Draw bird
+  sctx.fillStyle = "red";
+  sctx.fillRect(50, bird.y - 10, 20, 20);
+
+  // Display generation and fitness
+  sctx.fillStyle = "black";
+  sctx.font = "20px Arial";
+  sctx.fillText(`Generation: ${neat.generation}`, 20, 30);
+  sctx.fillText(`Best Fitness: ${neat.getBestNetwork().fitness}`, 20, 60);
 }
 
-setInterval(gameLoop, 20);
+// Start the game loop
+gameLoop();

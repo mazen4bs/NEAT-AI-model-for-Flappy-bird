@@ -1,57 +1,37 @@
 class NEAT {
   constructor(options) {
-    this.inputSize = options.inputSize;
-    this.outputSize = options.outputSize;
-    this.populationSize = options.populationSize;
-    this.mutationRate = options.mutationRate;
-    this.crossoverRate = options.crossoverRate;
-
-    // Initialize the population of networks
-    this.population = this.initializePopulation();
+    this.inputSize = options.inputSize; // Number of inputs (e.g., bird y, velocity, pipe x, pipe y)
+    this.hiddenSize = options.hiddenSize; // Number of hidden neurons
+    this.outputSize = options.outputSize; // Number of outputs (e.g., flap or not flap)
+    this.populationSize = options.populationSize; // Number of networks in the population
+    this.mutationRate = options.mutationRate; // Probability of mutation
+    this.crossoverRate = options.crossoverRate; // Probability of crossover
+    this.population = this.initializePopulation(); // Initialize the population
+    this.generation = 0; // Track the current generation
   }
 
-  // Initialize population with random neural networks
+  // Initialize the population with random neural networks
   initializePopulation() {
-    let population = [];
-    for (let i = 0; i < this.populationSize; i++) {
-      population.push(this.createRandomNetwork());
-    }
-    return population;
+    return Array.from({ length: this.populationSize }, () =>
+      new NeuralNetwork(this.inputSize, this.hiddenSize, this.outputSize)
+    );
   }
 
-  // Create a random neural network
-  createRandomNetwork() {
-    return new NeuralNetwork(this.inputSize, this.outputSize);
-  }
-
-  // Predict output based on inputs
+  // Predict the output (flap or not flap) for a given input
   predict(inputs) {
-    // Select the best network based on fitness
-    let bestNetwork = this.getBestNetwork();
+    const bestNetwork = this.getBestNetwork();
     return bestNetwork.predict(inputs);
   }
 
-  // Get the best-performing neural network (based on fitness score)
-  getBestNetwork() {
-    return this.population[0]; // Just returning the first for simplicity
-  }
-
-  // Update the fitness scores of the population (each bird's performance)
+  // Update the fitness scores of the population
   updateFitness() {
-    this.population.forEach(network => {
-      network.fitness = this.calculateFitness(network);
+    this.population.forEach((network) => {
+      network.fitness = network.score; // Fitness is based on the score (frames survived)
     });
     this.sortPopulationByFitness();
   }
 
-  // Fitness function: how well does the network perform in the game?
-  calculateFitness(network) {
-    // Use bird's score or distance to pipes as fitness score
-    // The fitness increases with survival time or distance traveled
-    return network.score; // Fitness is based on the network's score
-  }
-
-  // Sort the population based on fitness
+  // Sort the population by fitness (descending order)
   sortPopulationByFitness() {
     this.population.sort((a, b) => b.fitness - a.fitness);
   }
@@ -61,79 +41,113 @@ class NEAT {
     this.selection();
     this.crossover();
     this.mutation();
+    this.generation++; // Increment the generation counter
   }
 
-  // Selection: Select the best performers to "reproduce"
+  // Selection: Keep the top-performing networks
   selection() {
-    // Tournament selection or fitness proportionate selection
-    // Here, we keep the top performers (top half of the population)
-    let bestPerformers = this.population.slice(0, Math.floor(this.populationSize / 2));
-    this.population = bestPerformers;
+    const topPerformers = Math.floor(this.populationSize / 2);
+    this.population = this.population.slice(0, topPerformers);
   }
 
-  // Crossover: Combine genes of two networks to create a new offspring
+  // Crossover: Combine two networks to create a new offspring
   crossover() {
-    // Perform crossover between top networks to create new offspring
-    let newOffspring = [];
-    while (newOffspring.length < this.populationSize) {
-      let parent1 = this.population[Math.floor(Math.random() * this.population.length)];
-      let parent2 = this.population[Math.floor(Math.random() * this.population.length)];
-      let child = parent1.crossover(parent2);
-      newOffspring.push(child);
+    const newPopulation = [];
+    while (newPopulation.length < this.populationSize) {
+      const parent1 = this.population[Math.floor(Math.random() * this.population.length)];
+      const parent2 = this.population[Math.floor(Math.random() * this.population.length)];
+      const child = parent1.crossover(parent2);
+      newPopulation.push(child);
     }
-    this.population = newOffspring;
+    this.population = newPopulation;
   }
 
-  // Mutation: Randomly mutate the neural networks
+  // Mutation: Randomly mutate the weights of the networks
   mutation() {
-    this.population.forEach(network => {
+    this.population.forEach((network) => {
       if (Math.random() < this.mutationRate) {
         network.mutate();
       }
     });
   }
+
+  // Get the best-performing network in the population
+  getBestNetwork() {
+    return this.population[0];
+  }
 }
 
-// Neural Network class
 class NeuralNetwork {
-  constructor(inputSize, outputSize) {
+  constructor(inputSize, hiddenSize, outputSize) {
     this.inputSize = inputSize;
+    this.hiddenSize = hiddenSize;
     this.outputSize = outputSize;
-    this.weights = this.initializeWeights();
-    this.fitness = 0;
-    this.score = 0; // Score will track performance in the game
+    this.weightsInputHidden = this.initializeWeights(inputSize, hiddenSize); // Weights from input to hidden layer
+    this.weightsHiddenOutput = this.initializeWeights(hiddenSize, outputSize); // Weights from hidden to output layer
+    this.fitness = 0; // Fitness score
+    this.score = 0; // Score (frames survived)
   }
 
-  // Initialize random weights for the neural network
-  initializeWeights() {
-    return new Array(this.inputSize).fill().map(() => Math.random());
+  // Initialize random weights for the network
+  initializeWeights(rows, cols) {
+    return Array.from({ length: rows }, () =>
+      Array.from({ length: cols }, () => Math.random() * 2 - 1) // Weights between -1 and 1
+    );
   }
 
   // Predict the output based on the inputs
   predict(inputs) {
-    let sum = 0;
-    for (let i = 0; i < this.inputSize; i++) {
-      sum += inputs[i] * this.weights[i];
-    }
-    return sum > 0.5 ? 1 : 0; // Output 1 (flap) or 0 (no flap)
+    // Calculate hidden layer activations
+    const hidden = this.weightsInputHidden[0].map((_, i) =>
+      inputs.reduce((sum, input, j) => sum + input * this.weightsInputHidden[j][i], 0)
+    );
+    // Apply ReLU activation
+    const hiddenActivated = hidden.map((val) => Math.max(0, val));
+    // Calculate output layer activations
+    const output = this.weightsHiddenOutput[0].map((_, i) =>
+      hiddenActivated.reduce((sum, h, j) => sum + h * this.weightsHiddenOutput[j][i], 0)
+    );
+    // Output 1 (flap) if the output is greater than 0.5, otherwise 0 (no flap)
+    return output[0] > 0.5 ? 1 : 0;
   }
 
-  // Crossover with another neural network (combine weights)
+  // Crossover: Combine two networks to create a new offspring
   crossover(other) {
-    let child = new NeuralNetwork(this.inputSize, this.outputSize);
+    const child = new NeuralNetwork(this.inputSize, this.hiddenSize, this.outputSize);
     for (let i = 0; i < this.inputSize; i++) {
-      child.weights[i] = Math.random() > 0.5 ? this.weights[i] : other.weights[i];
+      for (let j = 0; j < this.hiddenSize; j++) {
+        child.weightsInputHidden[i][j] =
+          Math.random() > 0.5 ? this.weightsInputHidden[i][j] : other.weightsInputHidden[i][j];
+      }
+    }
+    for (let i = 0; i < this.hiddenSize; i++) {
+      for (let j = 0; j < this.outputSize; j++) {
+        child.weightsHiddenOutput[i][j] =
+          Math.random() > 0.5 ? this.weightsHiddenOutput[i][j] : other.weightsHiddenOutput[i][j];
+      }
     }
     return child;
   }
 
-  // Mutate the neural network (randomly adjust weights)
+  // Mutation: Randomly adjust the weights of the network
   mutate() {
-    let mutationIndex = Math.floor(Math.random() * this.weights.length);
-    this.weights[mutationIndex] = Math.random(); // Mutate the weight at this index
+    for (let i = 0; i < this.inputSize; i++) {
+      for (let j = 0; j < this.hiddenSize; j++) {
+        if (Math.random() < 0.1) {
+          this.weightsInputHidden[i][j] += (Math.random() - 0.5) * 0.5; // Perturb weight
+        }
+      }
+    }
+    for (let i = 0; i < this.hiddenSize; i++) {
+      for (let j = 0; j < this.outputSize; j++) {
+        if (Math.random() < 0.1) {
+          this.weightsHiddenOutput[i][j] += (Math.random() - 0.5) * 0.5; // Perturb weight
+        }
+      }
+    }
   }
 
-  // Update the score based on the game state
+  // Update the score (frames survived)
   updateScore(score) {
     this.score = score;
   }
