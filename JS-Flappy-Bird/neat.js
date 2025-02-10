@@ -1,13 +1,13 @@
-class NEAT {
+export class NEAT {
   constructor(options) {
-    this.inputSize = options.inputSize; // Number of inputs (e.g., bird y, velocity, pipe x, pipe y)
-    this.hiddenSize = options.hiddenSize; // Number of hidden neurons
-    this.outputSize = options.outputSize; // Number of outputs (e.g., flap or not flap)
-    this.populationSize = options.populationSize; // Number of networks in the population
-    this.mutationRate = options.mutationRate; // Probability of mutation
-    this.crossoverRate = options.crossoverRate; // Probability of crossover
-    this.population = this.initializePopulation(); // Initialize the population
-    this.generation = 0; // Track the current generation
+    this.inputSize = options.inputSize;
+    this.hiddenSize = options.hiddenSize;
+    this.outputSize = options.outputSize;
+    this.populationSize = options.populationSize;
+    this.mutationRate = options.mutationRate;
+    this.crossoverRate = options.crossoverRate;
+    this.population = this.initializePopulation();
+    this.generation = 0;
   }
 
   // Initialize the population with random neural networks
@@ -17,16 +17,13 @@ class NEAT {
     );
   }
 
-  // Predict the output (flap or not flap) for a given input
-  predict(inputs) {
-    const bestNetwork = this.getBestNetwork();
-    return bestNetwork.predict(inputs);
-  }
-
   // Update the fitness scores of the population
-  updateFitness() {
-    this.population.forEach((network) => {
-      network.fitness = network.score; // Fitness is based on the score (frames survived)
+  updateFitness(birds) {
+    this.population.forEach((network, i) => {
+      network.fitness = birds[i].score; // Fitness is based on the score (frames survived)
+      if (birds[i].alive) {
+        network.fitness += 10; // Bonus for surviving
+      }
     });
     this.sortPopulationByFitness();
   }
@@ -84,6 +81,8 @@ class NeuralNetwork {
     this.outputSize = outputSize;
     this.weightsInputHidden = this.initializeWeights(inputSize, hiddenSize); // Weights from input to hidden layer
     this.weightsHiddenOutput = this.initializeWeights(hiddenSize, outputSize); // Weights from hidden to output layer
+    this.biasHidden = this.initializeWeights(1, hiddenSize); // Bias for hidden layer
+    this.biasOutput = this.initializeWeights(1, outputSize); // Bias for output layer
     this.fitness = 0; // Fitness score
     this.score = 0; // Score (frames survived)
   }
@@ -99,13 +98,13 @@ class NeuralNetwork {
   predict(inputs) {
     // Calculate hidden layer activations
     const hidden = this.weightsInputHidden[0].map((_, i) =>
-      inputs.reduce((sum, input, j) => sum + input * this.weightsInputHidden[j][i], 0)
+      inputs.reduce((sum, input, j) => sum + input * this.weightsInputHidden[j][i], 0) + this.biasHidden[0][i]
     );
     // Apply ReLU activation
     const hiddenActivated = hidden.map((val) => Math.max(0, val));
     // Calculate output layer activations
     const output = this.weightsHiddenOutput[0].map((_, i) =>
-      hiddenActivated.reduce((sum, h, j) => sum + h * this.weightsHiddenOutput[j][i], 0)
+      hiddenActivated.reduce((sum, h, j) => sum + h * this.weightsHiddenOutput[j][i], 0) + this.biasOutput[0][i]
     );
     // Output 1 (flap) if the output is greater than 0.5, otherwise 0 (no flap)
     return output[0] > 0.5 ? 1 : 0;
@@ -126,10 +125,17 @@ class NeuralNetwork {
           Math.random() > 0.5 ? this.weightsHiddenOutput[i][j] : other.weightsHiddenOutput[i][j];
       }
     }
+    // Crossover biases
+    for (let i = 0; i < this.hiddenSize; i++) {
+      child.biasHidden[0][i] = Math.random() > 0.5 ? this.biasHidden[0][i] : other.biasHidden[0][i];
+    }
+    for (let i = 0; i < this.outputSize; i++) {
+      child.biasOutput[0][i] = Math.random() > 0.5 ? this.biasOutput[0][i] : other.biasOutput[0][i];
+    }
     return child;
   }
 
-  // Mutation: Randomly adjust the weights of the network
+  // Mutation: Randomly adjust the weights and biases of the network
   mutate() {
     for (let i = 0; i < this.inputSize; i++) {
       for (let j = 0; j < this.hiddenSize; j++) {
@@ -145,6 +151,17 @@ class NeuralNetwork {
         }
       }
     }
+    // Mutate biases
+    for (let i = 0; i < this.hiddenSize; i++) {
+      if (Math.random() < 0.1) {
+        this.biasHidden[0][i] += (Math.random() - 0.5) * 0.5; // Perturb bias
+      }
+    }
+    for (let i = 0; i < this.outputSize; i++) {
+      if (Math.random() < 0.1) {
+        this.biasOutput[0][i] += (Math.random() - 0.5) * 0.5; // Perturb bias
+      }
+    }
   }
 
   // Update the score (frames survived)
@@ -152,5 +169,3 @@ class NeuralNetwork {
     this.score = score;
   }
 }
-
-export { NEAT };
